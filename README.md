@@ -133,3 +133,16 @@ EXIT CODES
   2  loop layout did not verify against the capture
   3  --test-player: mismatch or stream not consumed exactly
 ```
+
+## License
+
+This project is licensed under the GNU General Public License, version 2 (see [LICENSE](LICENSE)).
+It includes a copy of the ASAP 6502 core, which is GPL version 2 or later, so the combined program is GPL.
+The LZSS encoder and decoder are ports of lzss-sap, which is MIT licensed; the MIT terms are compatible with the GPL.
+
+## References
+
+- **lzss-sap** by Daniel Serpell (dmsc): LZSS compressor and the 6502 `playlzs16` player that the `.lz16` format follows.
+  https://github.com/dmsc/lzss-sap (MIT License, Copyright (c) 2020 Daniel Serpell)
+- **ASAP** (Another Slight Atari Player) by Piotr Fusik: the 6502 emulation core, plus the embedded CMC and CMS players (CMC/DMC players by Marcin Lewandowski, CMS player by David Spilka). It is the source of the POKEY capture core,
+  GNU GPL version 2 or later. Project home: https://asap.sourceforge.net/
