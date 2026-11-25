@@ -12,7 +12,7 @@
 ;   $0600  init_song   (first call, sets up the song)
 ;   $0603  play_frame  (one frame, call once per VBI)
 ;
-; Assemble with MADS, the compressed song must be in song.lz16 next to this file:
+; Assemble with MADS, the compressed song must be in song_il.lz16 next to this file:
 ;   mads player_il.asm -o:player_il.xex
 ;
     org $0600

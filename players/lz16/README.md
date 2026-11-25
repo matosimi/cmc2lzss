@@ -87,12 +87,3 @@ entry points (`$0600` `init_song`, `$0603` `play_frame`), and the same end-of-so
 6502 core and compares every update with the `.sap` file. It only supports the 18-value (`player18`) players at the moment.
 The `song_end` address is in the player's `.lab` or `.lst` file.
 
-## Notes on the source headers
-
-Some header comments name a different input file than the `ins` line:
-
-- `player18.asm` says `song.lz16` in its header, but the `ins` line reads `song_18.lz16`.
-- `player_il.asm` says `song.lz16` in its header, but the `ins` line reads `song_il.lz16`.
-- `player_mono.asm` reads `song.lz16` in the `ins` line, and its `UPD` comment says the default is 2, but the value in the file is `UPD = 1`.
-
-The `ins` line is what the assembler uses, so follow it.
