@@ -24,7 +24,11 @@
 ; UPD = updates per VBI: 2 for double-mode CMS (default), 1 for one row per frame.
 UPD = 2
 
-NCH = 18
+; PHASE = 1 for the *_18_phase.lz16 files: one extra stream (the STIMER reset flag, index 18).
+; PHASE = 0 for all other files.
+PHASE = 1
+NCH = 18 + PHASE
+
 
     org $80
 chn_copy    .ds NCH
@@ -47,7 +51,7 @@ outbuf
     .ds NCH
 
 song_data
-    ins 'song.lz16'
+    ins 'song_18.lz16'
 song_end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -79,14 +83,24 @@ or_ext
     dex
     cpx #8
     bne or_ext
+    .if PHASE
+    ; STIMER reset of both chips, back to back: both dividers restart in phase
+    lda outbuf+18
+    beq no_reset
+    sta $D209
+    sta $D219
+no_reset
+    .endif
     rts
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Song initialization
 ;
 init_song
+	mva #$03 $d20f	;skctl init
+	sta $d21f
     ; Skip flags: 3 header bytes, bit k -> channel 17-k, LSB first
-    lda #17
+    lda #NCH-1
     sta hch
     ldy #0
 hdr_byte
@@ -119,7 +133,7 @@ hdr_done
     sta bptr+1
     lda #0
     sta bptr
-    ldx #17
+    ldx #NCH-1
 init_ch
     jsr get_byte
     sta outbuf,x
@@ -147,7 +161,7 @@ decode_update
     sta bptr+1
     lda #0
     sta bptr
-    ldx #17
+    ldx #NCH-1
 
 chn_loop
     lda skip_flag,x
@@ -198,10 +212,18 @@ play_frame
     sta upd_cnt
 upd_loop
     jsr decode_update
+	.if UPD > 1
+    	ldx vcpause:#15 ;vcount lines (30 scanlines) wait between writes
+@	lda vcount
+@	cmp vcount
+	beq @-
+	dex
+	bne @-1
+	.endif
     dec upd_cnt
     bne upd_loop
     rts
-
+vcount	equ $d40b
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Main program (run address): init, then one frame per VBI until the song ends
 ;
@@ -223,6 +245,6 @@ main_loop
     lda song_ptr
     cmp #<song_end
     bne main_loop
-    rts
+    jmp start ;rts
 
     run start

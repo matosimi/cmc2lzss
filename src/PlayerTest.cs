@@ -16,7 +16,14 @@ namespace SapRExport
         private const int InitEntry = 0x0600;   // jmp init_song
         private const int PlayEntry = 0x0603;   // jmp play_frame
         private const int CycleLimit = 29868;   // one NTSC frame per call is plenty for a player call
-        private const int HeaderLen = 15;       // "SAP\r\nTYPE R\r\n\r\n"
+        // Header of a SAP-R file: SAP, AUTHOR, NAME, TYPE R, then a blank line. Its length varies.
+        private static int HeaderLength(byte[] raw)
+        {
+            for (int i = 0; i + 3 < raw.Length; i++)
+                if (raw[i] == '\r' && raw[i + 1] == '\n' && raw[i + 2] == '\r' && raw[i + 3] == '\n')
+                    return i + 4;
+            throw new InvalidDataException("no blank line after the SAP header");
+        }
 
         /// <param name="xex">Player binary (MADS output).</param>
         /// <param name="sapr">Raw SAP-R file the player's stream was built from (one row per update).</param>
@@ -33,7 +40,8 @@ namespace SapRExport
             asap.LoadXex(xex);
 
             byte[] raw = File.ReadAllBytes(sapr);
-            int rows = (raw.Length - HeaderLen) / valuesPerRow;
+            int headerLen = HeaderLength(raw);
+            int rows = (raw.Length - headerLen) / valuesPerRow;
             int frames = rows / updatesPerFrame;
 
             // Expected update sequence: the stream starts with a copy of the first row (the init update).
@@ -43,15 +51,21 @@ namespace SapRExport
                 int src = Math.Max(k - 1, 0);
                 var u = new byte[18];
                 for (int i = 0; i < 18; i++)
-                    u[i] = Program.NormValue(i % 9, raw[HeaderLen + src * valuesPerRow + i]);
+                    u[i] = Program.NormValue(i % 9, raw[headerLen + src * valuesPerRow + i]);
                 expected.Add(u);
             }
 
             var writes = new List<int>();   // POKEY index 0..17 per write, in order
             var values = new List<byte>();
+            int stimer = 0;                 // STIMER writes ($D209 / $D219): phase resets
             asap.PokeyWriteHook = (addr, data) =>
             {
                 int reg = addr & 0x0F;
+                if (reg == 9)
+                {
+                    stimer++;
+                    return;
+                }
                 if (reg > 8)
                     return;
                 writes.Add((addr & 0x10) != 0 ? 9 + reg : reg);
@@ -100,6 +114,7 @@ namespace SapRExport
             bool countOk = updates == rows + 1;
 
             Console.WriteLine("rows     : " + rows + " (" + frames + " frames x " + updatesPerFrame + " updates)");
+            Console.WriteLine("STIMER   : " + stimer + " writes (phase resets; 2 per flagged row, 0 without PHASE)");
             Console.WriteLine("updates  : " + updates + " played, " + (rows + 1) + " expected" + (countOk ? "" : "  (COUNT MISMATCH)"));
             Console.WriteLine("mismatch : " + mismatches + (first != null ? "  first: " + first : ""));
             Console.WriteLine("stream   : pointer $" + ptr.ToString("X4") + ", song_end $" + getByte.ToString("X4") +

@@ -22,7 +22,12 @@
 ; UPD = updates per VBI: 2 for double-mode CMS (default), 1 for one row per frame.
 UPD = 2
 
-NCH = 9
+; PHASE = 1 for the *_il_phase.lz16 files: one extra stream (the STIMER reset flag, index 9,
+; carried by the base rows). PHASE = 0 for all other files.
+PHASE = 0
+NCH = 9 + PHASE
+HDR = (NCH + 6) / 8                 ; header bytes holding the NCH-1 skip flags
+
 
     org $80
 chn_copy    .ds NCH
@@ -68,6 +73,14 @@ ob_loop
     sta $D200,x
     dex
     bpl ob_loop
+    .if PHASE
+    ; STIMER reset of both chips, back to back: both dividers restart in phase
+    lda outbuf+9
+    beq no_reset
+    sta $D209
+    sta $D219
+no_reset
+    .endif
     rts
 
 out_ext
@@ -86,7 +99,7 @@ init_song
 	mva #$03 $d20f	;skctl init
 	sta $d21f
     ; Skip flags: 1 header byte, bit k -> channel 8-k, LSB first
-    lda #8
+    lda #NCH-1
     sta hch
     ldy #0
 hdr_byte
@@ -109,9 +122,9 @@ hdr_bit
 hdr_done
 
     ; Stream data starts after the 1 header byte
-    lda #<(song_data+1)
+    lda #<(song_data+HDR)
     sta song_ptr
-    lda #>(song_data+1)
+    lda #>(song_data+HDR)
     sta song_ptr+1
 
     ; Initial values, channels 8..0 (row 0)
@@ -119,7 +132,7 @@ hdr_done
     sta bptr+1
     lda #0
     sta bptr
-    ldx #8
+    ldx #NCH-1
 init_ch
     jsr get_byte
     sta outbuf,x
@@ -151,7 +164,7 @@ decode_row
     sta bptr+1
     lda #0
     sta bptr
-    ldx #8
+    ldx #NCH-1
 
 chn_loop
     lda skip_flag,x
@@ -210,12 +223,14 @@ play_frame
     sta upd_cnt
 upd_loop
     jsr decode_update
+	.if UPD > 1
 	ldx vcpause:#15 ;vcount lines (30 scanlines) wait between writes
 @	lda vcount
 @	cmp vcount
 	beq @-
 	dex
 	bne @-1
+	.endif
     dec upd_cnt
     jne upd_loop
     rts

@@ -4,7 +4,7 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>disable</Nullable>
-    <AssemblyName>sapr</AssemblyName>
+    <AssemblyName>cmc2lzss</AssemblyName>
     <RootNamespace>SapRExport</RootNamespace>
     <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>latest</LangVersion>

@@ -41,8 +41,8 @@ namespace SapRExport
         /// <param name="seconds">Length to capture, in seconds.</param>
         /// <param name="perUpdate">
         /// false: one row per video frame (the register state at the end of the frame).
-        /// true: one row per player update. Only CMS is supported; double-mode CMS calls the update
-        /// twice per frame, so this keeps both sets of writes.
+        /// true: one row per player update. CMS and CMC/DMC only; double-mode CMS and DMC call the
+        /// player twice per frame, so this keeps both sets of writes.
         /// </param>
         public static PokeyDump Capture(string path, int song, int seconds, bool perUpdate)
         {
@@ -56,8 +56,8 @@ namespace SapRExport
             int streams = channels > 1 ? 18 : 9;
             int hz = ntsc ? 60 : 50;
 
-            if (perUpdate && info.Type != ASAPModuleType.Cms)
-                throw new ArgumentException("per-update capture is only implemented for CMS modules");
+            if (perUpdate && info.Type != ASAPModuleType.Cms && info.Type != ASAPModuleType.Cmc)
+                throw new ArgumentException("per-update capture is only implemented for CMS and CMC/DMC modules");
 
             // Shadow of the 18 registers. Every raw write updates it.
             byte[] shadow = new byte[18];
@@ -98,7 +98,10 @@ namespace SapRExport
             {
                 // Each entry into the update routine means the previous update has finished, so the
                 // shadow then holds that update's state. The state after the last update is added at the end.
-                asap.PlayerUpdateAddr = info.GetPlayerAddress() + CmsUpdateOffset;
+                // CMS: the update routine inside the SDCMC player. CMC/DMC: the play entry (player+6),
+                // which ASAP calls once per update; DMC (Fastplay 156) calls it twice per frame.
+                int updateOffset = info.Type == ASAPModuleType.Cms ? CmsUpdateOffset : 6;
+                asap.PlayerUpdateAddr = info.GetPlayerAddress() + updateOffset;
                 asap.PlayerUpdateHook = () =>
                 {
                     updates++;
@@ -137,23 +140,35 @@ namespace SapRExport
         }
 
         /// <summary>
-        /// Writes the dump as a SAP-R file: text header (terminated by a blank line),
-        /// then one raw record per row. Records are streams-long (9 or 18 bytes).
+        /// Header text without quotes (they would end the quoted field).
         /// </summary>
-        public static void WriteSapR(PokeyDump dump, string outPath)
+        public static string NoQuotes(string s)
         {
-            WriteSapR(dump.Rows, 0, dump.Rows.Count, outPath);
+            return (s ?? "").Replace("\"", "");
         }
 
-        /// <summary>Writes rows [start, start+count) as a SAP-R file.</summary>
-        public static void WriteSapR(List<byte[]> rows, int start, int count, string outPath)
+        /// <summary>
+        /// AUTHOR field: at most 30 characters (cut at the end).
+        /// </summary>
+        public static string Fit30(string s)
+        {
+            string clean = NoQuotes(s);
+            return clean.Length > 30 ? clean.Substring(0, 30) : clean;
+        }
+
+        /// <summary>
+        /// Writes rows [start, start+count) as a SAP-R file. The header is
+        /// SAP, AUTHOR "..." (at most 30 characters), NAME "..." (full, not cut), TYPE R, then a blank line.
+        /// </summary>
+        public static void WriteSapR(List<byte[]> rows, int start, int count, string outPath, string author, string name)
         {
             using (var fs = new FileStream(outPath, FileMode.Create, FileAccess.Write))
             {
-                byte[] header = System.Text.Encoding.ASCII.GetBytes("SAP\r\nTYPE R\r\n\r\n");
+                string text = "SAP\r\nAUTHOR \"" + Fit30(author) + "\"\r\nNAME \"" + NoQuotes(name) + "\"\r\nTYPE R\r\n\r\n";
+                byte[] header = System.Text.Encoding.ASCII.GetBytes(text);
                 fs.Write(header, 0, header.Length);
                 for (int i = start; i < start + count; i++)
-                    fs.Write(rows[i], 0, rows[i].Length);
+                    fs.Write(rows[i], 0, Math.Min(rows[i].Length, 18));   // register values only; a phase flag byte is not part of SAP-R
             }
         }
     }
